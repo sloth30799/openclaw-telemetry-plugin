@@ -1,0 +1,6 @@
+{
+  "name": "mission-control-telemetry-bridge-dev-receiver",
+  "private": true,
+  "type": "module",
+  "description": "Local JSONL receiver for Mission Control telemetry bridge development."
+}

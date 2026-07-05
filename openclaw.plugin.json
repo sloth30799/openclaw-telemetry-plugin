@@ -1,0 +1,78 @@
+{
+  "id": "mission-control-telemetry-bridge",
+  "name": "Mission Control Telemetry Bridge",
+  "description": "Streams sanitized OpenClaw runtime telemetry into Mission Control.",
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {},
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "endpoint": {
+        "type": "string",
+        "description": "Explicit telemetry receiver endpoint override. Prefer endpointEnv for normal use."
+      },
+      "endpointEnv": {
+        "type": "string",
+        "default": "MISSION_CONTROL_RECEIVER_ENDPOINT",
+        "description": "Environment variable that contains the full telemetry receiver endpoint URL."
+      },
+      "tokenEnv": {
+        "type": "string",
+        "default": "MISSION_CONTROL_PLUGIN_TOKEN",
+        "description": "Environment variable that contains the receiver token."
+      },
+      "tokenHeader": {
+        "type": "string",
+        "default": "x-mission-control-plugin-token",
+        "description": "HTTP header used to send the receiver token."
+      },
+      "bypassTokenEnv": {
+        "type": "string",
+        "description": "Optional environment variable that contains a Vercel Protection Bypass for Automation token."
+      },
+      "batchSize": {
+        "type": "integer",
+        "default": 20,
+        "minimum": 1,
+        "maximum": 100
+      },
+      "flushIntervalMs": {
+        "type": "integer",
+        "default": 1000,
+        "minimum": 100,
+        "maximum": 60000
+      },
+      "maxRetries": {
+        "type": "integer",
+        "default": 3,
+        "minimum": 0,
+        "maximum": 20
+      },
+      "maxQueueSize": {
+        "type": "integer",
+        "default": 1000,
+        "minimum": 1,
+        "maximum": 10000
+      },
+      "includeMessageText": {
+        "type": "boolean",
+        "default": false
+      },
+      "includeToolParams": {
+        "type": "boolean",
+        "default": false
+      },
+      "includeToolResults": {
+        "type": "boolean",
+        "default": false
+      },
+      "enableDiagnosticEvents": {
+        "type": "boolean",
+        "default": false
+      }
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "mission-control-telemetry-bridge",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Production-ready OpenClaw telemetry bridge for Mission Control.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "main": "./dist/src/index.js",
+  "exports": {
+    ".": "./dist/src/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "sync:runtime": "node scripts/sync-runtime.mjs",
+    "build:runtime": "pnpm build && pnpm sync:runtime",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "receiver": "node dist/dev-receiver/src/server.js",
+    "smoke": "node dist/dev-receiver/src/smoke.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.1.9"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/src/index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.6.9",
+      "minGatewayVersion": "2026.6.9"
+    }
+  }
+}

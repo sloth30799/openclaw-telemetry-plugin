@@ -1,0 +1,8 @@
+packages:
+  - "."
+
+allowBuilds:
+  '@google/genai': true
+  openclaw@file:../../../../.local/lib/node_modules/openclaw: true
+  protobufjs: true
+  tree-sitter-bash: false
