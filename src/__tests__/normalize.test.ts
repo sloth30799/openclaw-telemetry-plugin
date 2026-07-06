@@ -4,6 +4,8 @@ import {
   normalizeAfterToolCall,
   normalizeAgentEnd,
   normalizeLlmOutput,
+  normalizeMessageReceived,
+  normalizeMessageSent,
   normalizeModelCallEnded,
   normalizeSubagentEnded,
 } from "../normalize.js";
@@ -40,6 +42,29 @@ describe("telemetry normalizers", () => {
     expect(JSON.stringify(event)).not.toContain(
       "DO_NOT_SERIALIZE_THIS_FINAL_MESSAGE",
     );
+  });
+
+  it("keeps agent_end safe when optional message history is missing", () => {
+    const event = normalizeAgentEnd(
+      {
+        runId: "run-1",
+        success: true,
+        durationMs: 200,
+      },
+      {
+        runId: "run-1",
+        sessionKey: "agent:main:main",
+        agentId: "main",
+      },
+      {
+        now,
+        createId: () => "event-agent-end-safe",
+      },
+    );
+
+    expect(event.title).toBe("Agent run completed");
+    expect(event.metadata?.success).toBe(true);
+    expect(event.metadata?.messageCount).toBeUndefined();
   });
 
   it("keeps model optional byte and TTFB fields absent-safe", () => {
@@ -151,6 +176,98 @@ describe("telemetry normalizers", () => {
       total_tokens: 15,
     });
     expect(JSON.stringify(event)).not.toContain("DO_NOT_SERIALIZE");
+  });
+
+  it("normalizes llm_output usage from alternate OpenClaw token field names", () => {
+    const event = normalizeLlmOutput(
+      {
+        runId: "event-run",
+        provider: "openai",
+        model: "gpt-test",
+        usage: {
+          prompt_tokens: 12,
+          completionTokens: 7,
+          cache_read_tokens: 2,
+          cacheWriteTokens: 1,
+          totalTokens: 19,
+          estimatedCostUsd: 0.01,
+        },
+      },
+      {
+        agentId: "main",
+        sessionKey: "agent:main:main",
+      },
+      {
+        now,
+        createId: () => "event-usage-alt-fields",
+      },
+    );
+
+    expect(event.model?.usage).toEqual({
+      input_tokens: 12,
+      output_tokens: 7,
+      prompt_tokens: 12,
+      completion_tokens: 7,
+      cache_read_tokens: 2,
+      cache_write_tokens: 1,
+      total_tokens: 19,
+      estimated_cost_usd: 0.01,
+    });
+  });
+
+  it("keeps message events safe when content is missing or not text", () => {
+    const inbound = normalizeMessageReceived(
+      {
+        from: "discord",
+        senderId: "sender-1",
+        messageId: "message-1",
+      },
+      {
+        channelId: "channel-1",
+        conversationId: "chat-1",
+      },
+      {
+        now,
+        createId: () => "event-message-inbound-safe",
+        config: {
+          includeMessageText: true,
+          includeToolParams: false,
+          includeToolResults: false,
+        },
+      },
+    );
+
+    const outbound = normalizeMessageSent(
+      {
+        to: "discord",
+        success: true,
+        messageId: "message-2",
+        content: {
+          text: "DO_NOT_SERIALIZE_THIS_NON_STRING_CONTENT",
+        },
+      },
+      {
+        channelId: "channel-1",
+        conversationId: "chat-1",
+      },
+      {
+        now,
+        createId: () => "event-message-outbound-safe",
+        config: {
+          includeMessageText: true,
+          includeToolParams: false,
+          includeToolResults: false,
+        },
+      },
+    );
+
+    expect(inbound.metadata?.contentLength).toBeUndefined();
+    expect(inbound.metadata?.content).toBeUndefined();
+    expect(outbound.metadata?.contentLength).toBeUndefined();
+    expect(outbound.metadata?.content).toBeUndefined();
+    expect(JSON.stringify(outbound)).not.toContain(
+      "DO_NOT_SERIALIZE_THIS_NON_STRING_CONTENT",
+    );
   });
 
   it("summarizes tool params and results by default without raw values", () => {

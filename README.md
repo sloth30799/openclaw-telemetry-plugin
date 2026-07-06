@@ -1,53 +1,19 @@
 # Mission Control Telemetry Bridge
 
-OpenClaw plugin id: `mission-control-telemetry-bridge`
+Mission Control Telemetry Bridge is an OpenClaw plugin that sends sanitized
+runtime telemetry to a receiver API such as Mission Control.
 
-Mission Control Telemetry Bridge streams sanitized OpenClaw runtime telemetry
-into Mission Control, turning agent sessions, model usage, tool activity, and
-workflow status into structured events for a live operator dashboard.
+- Plugin id: `mission-control-telemetry-bridge`
+- Package version: `0.0.1`
+- OpenClaw plugin API: `>=2026.6.9`
+- Minimum OpenClaw Gateway version: `2026.6.9`
 
-It ships as a standalone OpenClaw plugin with production-minded defaults:
-private text is off by default, receiver authentication is configurable, queue
-behavior is controlled, and the dashboard API owns durable event recording.
+The bridge has one responsibility: collect OpenClaw events, sanitize and
+normalize them, queue them briefly, and POST event batches to the configured
+receiver. It does not own storage, dashboards, database schema, read APIs, or
+Gateway restarts.
 
-## Lifecycle Split
-
-The plugin has two sides:
-
-- Before event streaming: configure OpenClaw, privacy defaults, endpoint envs,
-  auth headers, and queue behavior.
-- After event streaming: receive POST batches at an API endpoint, authenticate
-  them, validate the event body, and record events for dashboard reads.
-
-That distinction matters because the plugin owns telemetry delivery, while the
-receiver API owns storage, indexes, derived status rows, dashboard reads, and
-app-specific schema.
-
-## Before Event Streaming: OpenClaw Setup
-
-### What The Plugin Sends
-
-Included by default:
-
-- event identifiers and kinds
-- timestamps
-- session, run, job, and agent correlation fields when available
-- tool and model names
-- duration and outcome fields
-- token usage counters when available
-
-Excluded by default:
-
-- user message text
-- assistant output text
-- tool params
-- tool results
-- diagnostic events
-
-Only enable text, params, results, or diagnostic events if the receiver is
-private and the operator explicitly wants that telemetry stored.
-
-### Install And Build
+## Quick Start
 
 ```bash
 pnpm install
@@ -56,34 +22,75 @@ pnpm typecheck
 pnpm build
 ```
 
-`pnpm build` only compiles TypeScript to `dist/`.
+`pnpm build` compiles the plugin into `dist/`.
 
-To copy the built plugin into an OpenClaw runtime directory, run:
+To build and copy the compiled plugin into the local OpenClaw plugin runtime:
 
 ```bash
 pnpm build:runtime
 ```
 
-Set `OPENCLAW_PLUGIN_RUNTIME_DIR` to choose the sync destination. If unset, the
-sync script uses a local OpenClaw workspace path under the current user's home
-directory.
+By default, runtime sync writes to:
 
-Optional local env scaffold:
+```text
+~/.openclaw/workspace/mission-control-telemetry-bridge
+```
+
+Override the runtime sync target when needed:
+
+```bash
+OPENCLAW_PLUGIN_RUNTIME_DIR=/path/to/plugin/runtime pnpm build:runtime
+```
+
+After config or runtime files change, reload OpenClaw manually. In Han's setup,
+Gateway reloads and restarts are Han-owned.
+
+## Configure The Receiver
+
+Copy the example env file:
 
 ```bash
 cp .env.example .env
 ```
 
-### OpenClaw Plugin Config
+Mission Control receiver setup:
 
-Default Mission Control-compatible config:
+```bash
+MISSION_CONTROL_RECEIVER_ENDPOINT=http://localhost:3000/api/openclaw/plugin/events
+# Optional for local/private use. Set this for hosted or shared environments.
+MISSION_CONTROL_PLUGIN_TOKEN=replace-with-a-strong-random-token
+```
+
+Hosted Mission Control setup should use the hosted full URL:
+
+```bash
+MISSION_CONTROL_RECEIVER_ENDPOINT=https://<host>/api/openclaw/plugin/events
+```
+
+For a custom receiver, use your own env names:
+
+```bash
+OPENCLAW_TELEMETRY_ENDPOINT=https://your-app.example.com/api/openclaw/events
+# Optional for local/private use. Set this for hosted or shared environments.
+OPENCLAW_TELEMETRY_TOKEN=replace-with-a-strong-random-token
+```
+
+If no endpoint env value is available, the plugin falls back to the local test
+receiver:
+
+```text
+http://localhost:4319/events
+```
+
+## Plugin Config
+
+Mission Control config:
 
 ```json
 {
   "endpointEnv": "MISSION_CONTROL_RECEIVER_ENDPOINT",
   "tokenEnv": "MISSION_CONTROL_PLUGIN_TOKEN",
   "tokenHeader": "x-mission-control-plugin-token",
-  "bypassTokenEnv": "MISSION_CONTROL_VERCEL_BYPASS_TOKEN",
   "batchSize": 20,
   "flushIntervalMs": 1000,
   "maxRetries": 3,
@@ -95,7 +102,7 @@ Default Mission Control-compatible config:
 }
 ```
 
-Generic receiver example:
+Custom receiver config:
 
 ```json
 {
@@ -106,62 +113,82 @@ Generic receiver example:
 }
 ```
 
-Fields:
+Config fields:
 
-- `endpointEnv` - env var containing the full receiver URL. Default:
-  `MISSION_CONTROL_RECEIVER_ENDPOINT`.
-- `endpoint` - explicit endpoint override for tests/local experiments. Prefer
-  `endpointEnv` for normal runtime config.
-- `tokenEnv` - env var containing the receiver token. Default:
-  `MISSION_CONTROL_PLUGIN_TOKEN`.
-- `tokenHeader` - HTTP header used to send the receiver token. Default:
-  `x-mission-control-plugin-token`.
-- `bypassTokenEnv` - optional env var containing a Vercel Protection Bypass for
-  Automation token.
-- `batchSize` - max events per flush.
-- `flushIntervalMs` - queue flush interval.
-- `maxRetries` - retry count before dropping a queued event.
-- `maxQueueSize` - max queued events.
-- `includeMessageText` - include message text only if explicitly enabled.
-- `includeToolParams` - include tool params only if explicitly enabled.
-- `includeToolResults` - include tool results only if explicitly enabled.
-- `enableDiagnosticEvents` - include diagnostic events only if explicitly
-  enabled.
+- `endpointEnv`: env var that contains the receiver API URL.
+- `endpoint`: direct receiver URL override. Usually use `endpointEnv`.
+- `tokenEnv`: env var that contains the optional shared write token.
+- `tokenHeader`: HTTP header used to send the token when configured.
+- `bypassTokenEnv`: optional Vercel Protection Bypass for Automation token env
+  var.
+- `batchSize`: how many events to send at once.
+- `flushIntervalMs`: how often to send queued events.
+- `maxRetries`: how many times to retry a failed send.
+- `maxQueueSize`: max events kept in memory.
+- `includeMessageText`: send user and assistant message text.
+- `includeToolParams`: send tool input params.
+- `includeToolResults`: send tool result data.
+- `enableDiagnosticEvents`: send diagnostic events for local mapping/debugging.
 
-If `endpointEnv` is missing or points at an unset env var, the plugin falls back
-to `http://localhost:4319/events` for local receiver compatibility.
+## Privacy Defaults
 
-### Local Receiver Smoke Test
+By default, the plugin sends:
 
-The repo includes a small JSONL receiver for smoke testing before wiring a real
-dashboard API.
+- event id and event type
+- timestamps
+- session, run, job, and agent ids when available
+- tool names and model names
+- success/failure status
+- token usage when available
 
-```bash
-pnpm build
-pnpm receiver
+By default, the plugin does not send:
+
+- user message text
+- assistant output text
+- tool input params
+- tool result data
+- diagnostic events
+
+Only enable private text, params, results, or diagnostics when the receiver is
+private and you explicitly want to store that data.
+
+## OpenClaw Compatibility
+
+This package declares:
+
+```json
+{
+  "openclaw": {
+    "compat": {
+      "pluginApi": ">=2026.6.9",
+      "minGatewayVersion": "2026.6.9"
+    }
+  }
+}
 ```
 
-Send one smoke event:
+OpenClaw event fields can change between versions. The plugin reads known
+fields safely, skips missing optional fields, and keeps sending events when a
+field is unavailable.
 
-```bash
-MISSION_CONTROL_RECEIVER_ENDPOINT=http://localhost:4319/events pnpm smoke
-```
+If a field is missing in the current OpenClaw version, that field will not
+appear in the receiver payload. Event delivery still works.
 
-## After Event Streaming: Receiver API And Recording
+Turn on `enableDiagnosticEvents` locally when you need to map a new OpenClaw
+event shape.
 
-### Receiver API Contract
+## Receiver Request Contract
 
-After OpenClaw starts emitting hook events, the plugin batches normalized events
-and sends them to the configured receiver API:
+The plugin sends event batches to the configured receiver URL:
 
 ```text
 POST <receiver-url>
 content-type: application/json
-<tokenHeader>: <token>                  # only when token is configured
+<tokenHeader>: <token>                  # only when a token is configured
 x-vercel-protection-bypass: <token>     # only when bypassTokenEnv is configured
 ```
 
-Batch body:
+Example body:
 
 ```json
 {
@@ -190,45 +217,33 @@ Batch body:
 }
 ```
 
-A receiver should:
+The receiver should return a `2xx` response when the batch is accepted. If the
+receiver returns a non-`2xx` response, the plugin treats the send as failed and
+retries according to `maxRetries`.
 
-- authenticate the configured token header when present
-- validate `source`, `pluginId`, `version`, and `events`
-- write accepted events to durable storage
-- derive dashboard state from recorded events as needed
-- return a 2xx response when the batch is accepted
+## Local Test Receiver
 
-Non-2xx responses are treated as failures and retried according to queue
-settings.
+This repo includes a small local receiver for plugin development.
 
-### Mission Control Recording API
-
-Mission Control's default recording endpoint is:
-
-```text
-POST /api/openclaw/plugin/events
-```
-
-Legacy compatibility route:
-
-```text
-POST /api/openclaw/events
-```
-
-For a hosted Mission Control instance:
+Start it:
 
 ```bash
-MISSION_CONTROL_RECEIVER_ENDPOINT=https://mission-control.example.com/api/openclaw/plugin/events
-MISSION_CONTROL_PLUGIN_TOKEN=replace-with-a-strong-random-token
+pnpm build
+pnpm receiver
 ```
 
-In Mission Control, the receiver API is responsible for recording normalized
-rows and updating dashboard read models. For example, it can store raw event
-rows first, then update current agent status, append status snapshots, and add
-activity feed records.
+Send one test event:
 
-If Vercel Deployment Protection blocks plugin POSTs, use the header path with
-`bypassTokenEnv`:
+```bash
+MISSION_CONTROL_RECEIVER_ENDPOINT=http://localhost:4319/events pnpm smoke
+```
+
+The receiver listens on port `4319` by default. Override it with
+`MISSION_CONTROL_RECEIVER_PORT`.
+
+## Vercel Protection
+
+If Vercel Deployment Protection blocks plugin requests, use a bypass token:
 
 ```json
 {
@@ -236,37 +251,35 @@ If Vercel Deployment Protection blocks plugin POSTs, use the header path with
 }
 ```
 
-Query-string bypass is a last resort only:
+The plugin sends it as:
 
 ```text
-https://mission-control.example.com/api/openclaw/plugin/events?x-vercel-protection-bypass=<secret>
+x-vercel-protection-bypass: <token>
 ```
 
-That is secret-in-URL and can leak through config, logs, copied links, browser
-history, or proxies. Prefer the header.
+Avoid putting bypass tokens in URLs. URLs can leak through logs, browser
+history, copied links, and proxies.
+
+## Common Problems
+
+- Missing endpoint env: plugin sends to the local test receiver.
+- Wrong token: the receiver should return `401` when token auth is enabled.
+- Receiver API is down: plugin retries, then drops the batch after
+  `maxRetries`.
+- Vercel blocks requests: configure `bypassTokenEnv`.
+- Config changed but behavior did not: reload OpenClaw manually.
+- Expected fields are missing: confirm OpenClaw version compatibility and use
+  diagnostic events locally if the upstream event shape changed.
 
 ## Security Notes
 
-- Keep receiver URLs private unless the receiver is designed for public access.
-- Use a strong random token for write access.
-- Keep the dashboard/read APIs behind authentication or platform protection.
-- Do not commit real receiver URLs containing secrets, plugin tokens, or Vercel
-  bypass tokens.
-- Keep `includeMessageText`, `includeToolParams`, `includeToolResults`, and
-  `enableDiagnosticEvents` disabled unless the operator accepts the privacy
-  impact.
+- Keep receiver URLs private unless the app is meant to be public.
+- Use a strong random token for hosted writes.
+- Protect any UI or read APIs that expose telemetry.
+- Do not commit real tokens, bypass secrets, or secret URLs.
+- Leave private text/tool data disabled unless you really need it.
 
-See [SECURITY.md](SECURITY.md) for reporting and handling guidance.
-
-## Failure Modes
-
-- Missing endpoint env: plugin falls back to the local JSONL receiver.
-- Token missing or mismatch: receiver should return `401`.
-- Endpoint unreachable: plugin retries up to `maxRetries`, then drops the batch.
-- Protection bypass missing: configure `bypassTokenEnv` and set the named env
-  var.
-- Runtime config changed but plugin still uses old settings: reload OpenClaw in
-  the way your installation expects.
+See [SECURITY.md](SECURITY.md).
 
 ## License
 

@@ -57,12 +57,13 @@ export function normalizeSessionStart(
   ctx?: PluginHookSessionContext,
   options: NormalizerOptions = {},
 ): MissionControlTelemetryEvent {
+  const eventRecord = asRecord(event);
+  const resumedFrom = readString(eventRecord?.resumedFrom);
+
   return buildBaseEvent("session_started", "OpenClaw session started", event, ctx, options, {
-    summary: event.resumedFrom
-      ? `Session resumed from ${event.resumedFrom}`
-      : "Session opened",
+    summary: resumedFrom ? `Session resumed from ${resumedFrom}` : "Session opened",
     metadata: {
-      resumedFrom: event.resumedFrom,
+      resumedFrom,
     },
   });
 }
@@ -72,15 +73,18 @@ export function normalizeSessionEnd(
   ctx?: PluginHookSessionContext,
   options: NormalizerOptions = {},
 ): MissionControlTelemetryEvent {
+  const eventRecord = asRecord(event);
+  const reason = readString(eventRecord?.reason) ?? "unknown";
+
   return buildBaseEvent("session_ended", "OpenClaw session ended", event, ctx, options, {
-    summary: `Session ended: ${event.reason ?? "unknown"}`,
+    summary: `Session ended: ${reason}`,
     metadata: {
-      reason: event.reason,
-      durationMs: event.durationMs,
-      messageCount: event.messageCount,
-      transcriptArchived: event.transcriptArchived,
-      nextSessionId: event.nextSessionId,
-      nextSessionKey: event.nextSessionKey,
+      reason,
+      durationMs: readNumber(eventRecord?.durationMs),
+      messageCount: readNumber(eventRecord?.messageCount),
+      transcriptArchived: readBoolean(eventRecord?.transcriptArchived),
+      nextSessionId: readString(eventRecord?.nextSessionId),
+      nextSessionKey: readString(eventRecord?.nextSessionKey),
     },
   });
 }
@@ -90,19 +94,23 @@ export function normalizeModelCallStarted(
   ctx?: PluginHookAgentContext,
   options: NormalizerOptions = {},
 ): MissionControlTelemetryEvent {
+  const eventRecord = asRecord(event);
+  const provider = readString(eventRecord?.provider);
+  const model = readString(eventRecord?.model);
+
   return buildBaseEvent(
     "model_call_started",
-    `Model call started: ${event.provider}/${event.model}`,
+    `Model call started: ${describeModel(provider, model)}`,
     event,
     ctx,
     options,
     {
       model: {
-        provider: event.provider,
-        model: event.model,
-        api: event.api,
-        transport: event.transport,
-        contextTokenBudget: event.contextTokenBudget,
+        provider,
+        model,
+        api: readString(eventRecord?.api),
+        transport: readString(eventRecord?.transport),
+        contextTokenBudget: readNumber(eventRecord?.contextTokenBudget),
       },
       metadata: contextWindowMetadata(event),
     },
@@ -114,29 +122,35 @@ export function normalizeModelCallEnded(
   ctx?: PluginHookAgentContext,
   options: NormalizerOptions = {},
 ): MissionControlTelemetryEvent {
+  const eventRecord = asRecord(event);
+  const provider = readString(eventRecord?.provider);
+  const model = readString(eventRecord?.model);
+  const outcome = readOutcome(eventRecord?.outcome);
+  const durationMs = readNumber(eventRecord?.durationMs);
+
   return buildBaseEvent(
     "model_call_ended",
-    `Model call ${event.outcome}: ${event.provider}/${event.model}`,
+    `Model call ${outcome ?? "ended"}: ${describeModel(provider, model)}`,
     event,
     ctx,
     options,
     {
       model: {
-        provider: event.provider,
-        model: event.model,
-        api: event.api,
-        transport: event.transport,
-        durationMs: event.durationMs,
-        outcome: event.outcome,
-        errorCategory: event.errorCategory,
-        failureKind: event.failureKind,
-        requestPayloadBytes: readNumber(event.requestPayloadBytes),
-        responseStreamBytes: readNumber(event.responseStreamBytes),
-        timeToFirstByteMs: readNumber(event.timeToFirstByteMs),
-        upstreamRequestIdHash: event.upstreamRequestIdHash,
-        contextTokenBudget: event.contextTokenBudget,
+        provider,
+        model,
+        api: readString(eventRecord?.api),
+        transport: readString(eventRecord?.transport),
+        durationMs,
+        outcome,
+        errorCategory: readString(eventRecord?.errorCategory),
+        failureKind: readString(eventRecord?.failureKind),
+        requestPayloadBytes: readNumber(eventRecord?.requestPayloadBytes),
+        responseStreamBytes: readNumber(eventRecord?.responseStreamBytes),
+        timeToFirstByteMs: readNumber(eventRecord?.timeToFirstByteMs),
+        upstreamRequestIdHash: readString(eventRecord?.upstreamRequestIdHash),
+        contextTokenBudget: readNumber(eventRecord?.contextTokenBudget),
       },
-      summary: `Duration ${event.durationMs}ms`,
+      summary: durationMs === undefined ? undefined : `Duration ${durationMs}ms`,
       metadata: contextWindowMetadata(event),
     },
   );
@@ -147,25 +161,29 @@ export function normalizeLlmOutput(
   ctx?: PluginHookAgentContext,
   options: NormalizerOptions = {},
 ): MissionControlTelemetryEvent {
+  const eventRecord = asRecord(event);
+  const provider = readString(eventRecord?.provider);
+  const model = readString(eventRecord?.model);
+
   return buildBaseEvent(
     "llm_output",
-    `LLM output: ${event.provider}/${event.model}`,
+    `LLM output: ${describeModel(provider, model)}`,
     event,
     ctx,
     options,
     {
       model: {
-        provider: event.provider,
-        model: event.model,
-        resolvedRef: event.resolvedRef,
-        harnessId: event.harnessId,
-        contextTokenBudget: event.contextTokenBudget,
-        usage: normalizeUsage(event.usage),
+        provider,
+        model,
+        resolvedRef: readString(eventRecord?.resolvedRef),
+        harnessId: readString(eventRecord?.harnessId),
+        contextTokenBudget: readNumber(eventRecord?.contextTokenBudget),
+        usage: normalizeUsage(eventRecord?.usage),
       },
       metadata: {
         ...contextWindowMetadata(event),
-        reasoningEffort: event.reasoningEffort,
-        fastMode: event.fastMode,
+        reasoningEffort: eventRecord?.reasoningEffort,
+        fastMode: readBoolean(eventRecord?.fastMode),
       },
     },
   );
@@ -177,30 +195,38 @@ export function normalizeAfterToolCall(
   options: NormalizerOptions = {},
 ): MissionControlTelemetryEvent {
   const config = withDefaultConfig(options.config);
-  const outcome = event.error ? "error" : "completed";
+  const eventRecord = asRecord(event);
+  const toolName =
+    readString(eventRecord?.toolName) ?? readString(ctx?.toolName);
+  const hasError = hasValue(eventRecord?.error);
+  const outcome = hasError ? "error" : "completed";
+  const hasResult = eventRecord?.result !== undefined;
 
   return buildBaseEvent(
     "tool_call_completed",
-    `Tool call ${outcome}: ${event.toolName}`,
+    `Tool call ${outcome}: ${toolName ?? "unknown tool"}`,
     event,
     ctx,
     options,
     {
       tool: {
-        name: event.toolName,
-        callId: event.toolCallId ?? ctx?.toolCallId,
-        durationMs: event.durationMs,
+        name: toolName,
+        callId:
+          readString(eventRecord?.toolCallId) ?? readString(ctx?.toolCallId),
+        durationMs: readNumber(eventRecord?.durationMs),
         outcome,
-        error: compactError(event.error),
-        paramsSummary: summarizeToolParams(event.params, config.includeToolParams),
+        error: compactError(eventRecord?.error),
+        paramsSummary: summarizeToolParams(
+          eventRecord?.params,
+          config.includeToolParams,
+        ),
       },
       metadata: {
         toolKind: ctx?.toolKind,
         toolInputKind: ctx?.toolInputKind,
-        resultSummary:
-          event.result === undefined
-            ? undefined
-            : summarizeToolResult(event.result, config.includeToolResults),
+        resultSummary: hasResult
+          ? summarizeToolResult(eventRecord?.result, config.includeToolResults)
+          : undefined,
       },
     },
   );
@@ -211,19 +237,23 @@ export function normalizeAgentEnd(
   ctx?: PluginHookAgentContext,
   options: NormalizerOptions = {},
 ): MissionControlTelemetryEvent {
+  const eventRecord = asRecord(event);
+  const success = readBoolean(eventRecord?.success);
+  const title = success === false ? "Agent run failed" : "Agent run completed";
+
   return buildBaseEvent(
     "agent_ended",
-    event.success ? "Agent run completed" : "Agent run failed",
+    title,
     event,
     ctx,
     options,
     {
-      summary: event.success ? "Run completed" : "Run failed",
+      summary: success === false ? "Run failed" : "Run completed",
       metadata: {
-        success: event.success,
-        error: compactError(event.error),
-        durationMs: event.durationMs,
-        messageCount: event.messages.length,
+        success,
+        error: compactError(eventRecord?.error),
+        durationMs: readNumber(eventRecord?.durationMs),
+        messageCount: readArrayLength(eventRecord?.messages),
       },
     },
   );
@@ -235,22 +265,27 @@ export function normalizeMessageReceived(
   options: NormalizerOptions = {},
 ): MissionControlTelemetryEvent {
   const config = withDefaultConfig(options.config);
+  const eventRecord = asRecord(event);
+  const contentLength = readStringLength(eventRecord?.content);
 
   return buildBaseEvent("message_received", "Message received", event, ctx, options, {
     message: {
       direction: "inbound",
-      provider: event.from,
+      provider: readString(eventRecord?.from),
       channelId: ctx?.channelId,
       chatId: ctx?.conversationId,
-      senderId: event.senderId ?? ctx?.senderId,
+      senderId: readString(eventRecord?.senderId) ?? ctx?.senderId,
     },
     metadata: {
-      messageId: event.messageId ?? ctx?.messageId,
-      threadId: event.threadId,
-      hasContent: event.content.length > 0,
-      contentLength: event.content.length,
-      content: config.includeMessageText ? event.content : undefined,
-      metadata: sanitizeJsonValue(event.metadata, 2),
+      messageId: readString(eventRecord?.messageId) ?? ctx?.messageId,
+      threadId: readString(eventRecord?.threadId),
+      hasContent:
+        contentLength === undefined ? undefined : contentLength > 0,
+      contentLength,
+      content: config.includeMessageText
+        ? readString(eventRecord?.content)
+        : undefined,
+      metadata: sanitizeJsonValue(eventRecord?.metadata, 2),
     },
   });
 }
@@ -261,28 +296,35 @@ export function normalizeMessageSent(
   options: NormalizerOptions = {},
 ): MissionControlTelemetryEvent {
   const config = withDefaultConfig(options.config);
+  const eventRecord = asRecord(event);
+  const success = readBoolean(eventRecord?.success);
+  const contentLength = readStringLength(eventRecord?.content);
+  const title = success === false ? "Message send failed" : "Message sent";
 
   return buildBaseEvent(
     "message_sent",
-    event.success ? "Message sent" : "Message send failed",
+    title,
     event,
     ctx,
     options,
     {
       message: {
         direction: "outbound",
-        provider: event.to,
+        provider: readString(eventRecord?.to),
         channelId: ctx?.channelId,
         chatId: ctx?.conversationId,
         senderId: ctx?.senderId,
-        success: event.success,
+        success,
       },
       metadata: {
-        messageId: event.messageId,
-        error: compactError(event.error),
-        hasContent: event.content.length > 0,
-        contentLength: event.content.length,
-        content: config.includeMessageText ? event.content : undefined,
+        messageId: readString(eventRecord?.messageId),
+        error: compactError(eventRecord?.error),
+        hasContent:
+          contentLength === undefined ? undefined : contentLength > 0,
+        contentLength,
+        content: config.includeMessageText
+          ? readString(eventRecord?.content)
+          : undefined,
       },
     },
   );
@@ -293,24 +335,28 @@ export function normalizeSubagentSpawned(
   ctx?: PluginHookSubagentContext,
   options: NormalizerOptions = {},
 ): MissionControlTelemetryEvent {
+  const eventRecord = asRecord(event);
+  const agentId = readString(eventRecord?.agentId);
+  const label = readString(eventRecord?.label);
+
   return buildBaseEvent(
     "subagent_spawned",
-    `Subagent spawned: ${event.label ?? event.agentId}`,
+    `Subagent spawned: ${label ?? agentId ?? "unknown subagent"}`,
     event,
     ctx,
     options,
     {
-      openclawAgentId: event.agentId,
+      openclawAgentId: agentId,
       subagent: {
-        childSessionKey: event.childSessionKey,
-        label: event.label,
-        resolvedModel: event.resolvedModel,
-        resolvedProvider: event.resolvedProvider,
+        childSessionKey: readString(eventRecord?.childSessionKey),
+        label,
+        resolvedModel: readString(eventRecord?.resolvedModel),
+        resolvedProvider: readString(eventRecord?.resolvedProvider),
       },
       metadata: {
-        mode: event.mode,
-        threadRequested: event.threadRequested,
-        requester: sanitizeJsonValue(event.requester, 2),
+        mode: readString(eventRecord?.mode),
+        threadRequested: readBoolean(eventRecord?.threadRequested),
+        requester: sanitizeJsonValue(eventRecord?.requester, 2),
       },
     },
   );
@@ -321,24 +367,27 @@ export function normalizeSubagentEnded(
   ctx?: PluginHookSubagentContext,
   options: NormalizerOptions = {},
 ): MissionControlTelemetryEvent {
+  const eventRecord = asRecord(event);
+  const targetSessionKey = readString(eventRecord?.targetSessionKey);
+
   return buildBaseEvent(
     "subagent_ended",
-    `Subagent ended: ${event.targetSessionKey}`,
+    `Subagent ended: ${targetSessionKey ?? "unknown subagent"}`,
     event,
     ctx,
     options,
     {
       subagent: {
-        targetSessionKey: event.targetSessionKey,
-        targetKind: event.targetKind,
-        outcome: event.outcome,
-        error: compactError(event.error),
+        targetSessionKey,
+        targetKind: readTargetKind(eventRecord?.targetKind),
+        outcome: readString(eventRecord?.outcome),
+        error: compactError(eventRecord?.error),
       },
       metadata: {
-        reason: event.reason,
-        sendFarewell: event.sendFarewell,
-        accountId: event.accountId,
-        endedAt: event.endedAt,
+        reason: readString(eventRecord?.reason),
+        sendFarewell: readBoolean(eventRecord?.sendFarewell),
+        accountId: readString(eventRecord?.accountId),
+        endedAt: readString(eventRecord?.endedAt),
       },
     },
   );
@@ -490,43 +539,63 @@ function makeTraceparent(
   return validTraceId && validSpanId ? `00-${traceId}-${spanId}-01` : undefined;
 }
 
-function contextWindowMetadata(event: {
-  contextWindowSource?: unknown;
-  contextWindowReferenceTokens?: unknown;
-}): Record<string, unknown> {
+function contextWindowMetadata(event: unknown): Record<string, unknown> {
+  const eventRecord = asRecord(event);
+
   return removeUndefined({
-    contextWindowSource: event.contextWindowSource,
-    contextWindowReferenceTokens: event.contextWindowReferenceTokens,
+    contextWindowSource: eventRecord?.contextWindowSource,
+    contextWindowReferenceTokens: eventRecord?.contextWindowReferenceTokens,
   });
 }
 
-function normalizeUsage(
-  usage:
-    | {
-        input?: number;
-        output?: number;
-        cacheRead?: number;
-        cacheWrite?: number;
-        total?: number;
-      }
-    | undefined,
-): NormalizedUsage | undefined {
-  if (!usage) {
+function normalizeUsage(usage: unknown): NormalizedUsage | undefined {
+  const usageRecord = asRecord(usage);
+  if (!usageRecord) {
     return undefined;
   }
 
-  const inputTokens = readNumber(usage.input);
-  const outputTokens = readNumber(usage.output);
-  const cacheReadTokens = readNumber(usage.cacheRead);
-  const cacheWriteTokens = readNumber(usage.cacheWrite);
-  const totalTokens = readNumber(usage.total);
+  const inputTokens = pickNumber(
+    usageRecord,
+    "input",
+    "input_tokens",
+    "inputTokens",
+    "prompt_tokens",
+    "promptTokens",
+  );
+  const outputTokens = pickNumber(
+    usageRecord,
+    "output",
+    "output_tokens",
+    "outputTokens",
+    "completion_tokens",
+    "completionTokens",
+  );
+  const cacheReadTokens = pickNumber(
+    usageRecord,
+    "cacheRead",
+    "cache_read_tokens",
+    "cacheReadTokens",
+  );
+  const cacheWriteTokens = pickNumber(
+    usageRecord,
+    "cacheWrite",
+    "cache_write_tokens",
+    "cacheWriteTokens",
+  );
+  const totalTokens = pickNumber(usageRecord, "total", "total_tokens", "totalTokens");
+  const estimatedCostUsd = pickNumber(
+    usageRecord,
+    "estimated_cost_usd",
+    "estimatedCostUsd",
+  );
 
   if (
     inputTokens === undefined &&
     outputTokens === undefined &&
     cacheReadTokens === undefined &&
     cacheWriteTokens === undefined &&
-    totalTokens === undefined
+    totalTokens === undefined &&
+    estimatedCostUsd === undefined
   ) {
     return undefined;
   }
@@ -539,6 +608,7 @@ function normalizeUsage(
     cache_read_tokens: cacheReadTokens,
     cache_write_tokens: cacheWriteTokens,
     total_tokens: totalTokens,
+    estimated_cost_usd: estimatedCostUsd,
   });
 }
 
@@ -561,4 +631,45 @@ function removeUndefined<T extends Record<string, unknown>>(value: T): T {
     }
   }
   return value;
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function readOutcome(value: unknown): "completed" | "error" | undefined {
+  return value === "completed" || value === "error" ? value : undefined;
+}
+
+function readTargetKind(value: unknown): "subagent" | "acp" | undefined {
+  return value === "subagent" || value === "acp" ? value : undefined;
+}
+
+function readArrayLength(value: unknown): number | undefined {
+  return Array.isArray(value) ? value.length : undefined;
+}
+
+function readStringLength(value: unknown): number | undefined {
+  return typeof value === "string" ? value.length : undefined;
+}
+
+function pickNumber(
+  record: AnyRecord | undefined,
+  ...keys: string[]
+): number | undefined {
+  for (const key of keys) {
+    const value = readNumber(record?.[key]);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function describeModel(provider: string | undefined, model: string | undefined): string {
+  return [provider, model].filter(Boolean).join("/") || "unknown model";
+}
+
+function hasValue(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== false;
 }

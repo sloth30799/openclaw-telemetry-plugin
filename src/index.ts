@@ -29,7 +29,7 @@ const entry: OpenClawPluginEntry = {
   id: PLUGIN_ID,
   name: "Mission Control Telemetry Bridge",
   description:
-    "Bridge sanitized OpenClaw runtime telemetry to a Mission Control-compatible receiver.",
+    "Bridge sanitized OpenClaw runtime telemetry to an app API.",
   register(api) {
     const ensureQueue = (rawConfig?: unknown): TelemetryQueue => {
       if (!queue) {

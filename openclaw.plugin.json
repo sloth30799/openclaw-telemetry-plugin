@@ -1,7 +1,7 @@
 {
   "id": "mission-control-telemetry-bridge",
   "name": "Mission Control Telemetry Bridge",
-  "description": "Streams sanitized OpenClaw runtime telemetry into Mission Control.",
+  "description": "Streams sanitized OpenClaw runtime telemetry into an app API.",
   "activation": {
     "onStartup": true
   },
@@ -22,12 +22,12 @@
       "tokenEnv": {
         "type": "string",
         "default": "MISSION_CONTROL_PLUGIN_TOKEN",
-        "description": "Environment variable that contains the receiver token."
+        "description": "Optional environment variable that contains the receiver token."
       },
       "tokenHeader": {
         "type": "string",
         "default": "x-mission-control-plugin-token",
-        "description": "HTTP header used to send the receiver token."
+        "description": "HTTP header used to send the receiver token when configured."
       },
       "bypassTokenEnv": {
         "type": "string",
