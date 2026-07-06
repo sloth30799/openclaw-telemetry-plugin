@@ -67,6 +67,18 @@ describe("resolveTelemetryConfig", () => {
     expect(config.bypassToken).toBe("bypass-secret");
   });
 
+  it("uses the default Vercel bypass token env when present", () => {
+    const config = resolveTelemetryConfig(
+      {},
+      {
+        MISSION_CONTROL_VERCEL_BYPASS_TOKEN: "bypass-secret",
+      },
+    );
+
+    expect(config.bypassTokenEnv).toBe("MISSION_CONTROL_VERCEL_BYPASS_TOKEN");
+    expect(config.bypassToken).toBe("bypass-secret");
+  });
+
   it("supports custom receiver token header names", () => {
     const config = resolveTelemetryConfig(
       {

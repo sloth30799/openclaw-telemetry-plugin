@@ -91,6 +91,7 @@ Mission Control config:
   "endpointEnv": "MISSION_CONTROL_RECEIVER_ENDPOINT",
   "tokenEnv": "MISSION_CONTROL_PLUGIN_TOKEN",
   "tokenHeader": "x-mission-control-plugin-token",
+  "bypassTokenEnv": "MISSION_CONTROL_VERCEL_BYPASS_TOKEN",
   "batchSize": 20,
   "flushIntervalMs": 1000,
   "maxRetries": 3,
@@ -120,7 +121,7 @@ Config fields:
 - `tokenEnv`: env var that contains the optional shared write token.
 - `tokenHeader`: HTTP header used to send the token when configured.
 - `bypassTokenEnv`: optional Vercel Protection Bypass for Automation token env
-  var.
+  var. Defaults to `MISSION_CONTROL_VERCEL_BYPASS_TOKEN`.
 - `batchSize`: how many events to send at once.
 - `flushIntervalMs`: how often to send queued events.
 - `maxRetries`: how many times to retry a failed send.
@@ -243,7 +244,15 @@ The receiver listens on port `4319` by default. Override it with
 
 ## Vercel Protection
 
-If Vercel Deployment Protection blocks plugin requests, use a bypass token:
+If Vercel Deployment Protection blocks plugin requests, set the default bypass
+token env:
+
+```bash
+MISSION_CONTROL_VERCEL_BYPASS_TOKEN=replace-with-vercel-bypass-token
+```
+
+The default config reads that env name automatically. For a custom env name,
+set:
 
 ```json
 {
@@ -266,7 +275,7 @@ history, copied links, and proxies.
 - Wrong token: the receiver should return `401` when token auth is enabled.
 - Receiver API is down: plugin retries, then drops the batch after
   `maxRetries`.
-- Vercel blocks requests: configure `bypassTokenEnv`.
+- Vercel blocks requests: set `MISSION_CONTROL_VERCEL_BYPASS_TOKEN`.
 - Config changed but behavior did not: reload OpenClaw manually.
 - Expected fields are missing: confirm OpenClaw version compatibility and use
   diagnostic events locally if the upstream event shape changed.

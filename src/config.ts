@@ -1,4 +1,5 @@
 import {
+  DEFAULT_BYPASS_TOKEN_ENV,
   DEFAULT_ENDPOINT,
   DEFAULT_ENDPOINT_ENV,
   DEFAULT_TOKEN_ENV,
@@ -30,7 +31,10 @@ export function resolveTelemetryConfig(
   const envEndpoint = readOptionalString(env[endpointEnv]);
   const tokenEnv = readString(input.tokenEnv, DEFAULT_TOKEN_ENV);
   const tokenHeader = readString(input.tokenHeader, DEFAULT_TOKEN_HEADER);
-  const bypassTokenEnv = readOptionalString(input.bypassTokenEnv);
+  const bypassTokenEnv = readString(
+    input.bypassTokenEnv,
+    DEFAULT_BYPASS_TOKEN_ENV,
+  );
 
   return {
     endpoint: directEndpoint ?? envEndpoint ?? DEFAULT_ENDPOINT,
