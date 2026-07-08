@@ -136,6 +136,11 @@ describe("telemetry normalizers", () => {
         model: "gpt-test",
         resolvedRef: "openai/gpt-test",
         harnessId: "test-harness",
+        contextTokenBudget: 1000,
+        contextWindowSource: "session",
+        contextWindowReferenceTokens: 500,
+        reasoningEffort: "medium",
+        fastMode: false,
         prompt: "DO_NOT_SERIALIZE_THIS_PROMPT",
         assistantTexts: ["DO_NOT_SERIALIZE_THIS_ASSISTANT_TEXT"],
         lastAssistant: {
@@ -174,6 +179,13 @@ describe("telemetry normalizers", () => {
       cache_read_tokens: 3,
       cache_write_tokens: 2,
       total_tokens: 15,
+    });
+    expect(event.model?.contextTokenBudget).toBe(1000);
+    expect(event.metadata).toMatchObject({
+      contextWindowSource: "session",
+      contextWindowReferenceTokens: 500,
+      reasoningEffort: "medium",
+      fastMode: false,
     });
     expect(JSON.stringify(event)).not.toContain("DO_NOT_SERIALIZE");
   });
