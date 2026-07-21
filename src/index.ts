@@ -73,7 +73,7 @@ const entry: OpenClawPluginEntry = {
     api.on("gateway_stop", async () => {
       stopTimer();
       if (queue) {
-        await queue.flush();
+        reportFlushResult(await queue.flush(), api);
       }
     });
 
@@ -149,14 +149,28 @@ function startTimer(config: ResolvedTelemetryConfig, api: OpenClawPluginApi): vo
   }
 
   timer = setInterval(() => {
-    queue?.flush().catch((error: unknown) => {
-      api.logger.warn(
-        `Telemetry bridge flush failed: ${formatError(error)}`,
-      );
-    });
+    void queue
+      ?.flush()
+      .then((result) => reportFlushResult(result, api))
+      .catch(() => {
+        api.logger.warn("Telemetry bridge flush failed before a result was available.");
+      });
   }, config.flushIntervalMs);
 
   timer.unref?.();
+}
+
+export function reportFlushResult(
+  result: { pending: number; dropped: number; error?: unknown },
+  api: OpenClawPluginApi,
+): void {
+  if (!result.error && result.dropped === 0) {
+    return;
+  }
+
+  api.logger.warn(
+    `Telemetry bridge delivery issue: ${result.pending} pending; ${result.dropped} dropped.`,
+  );
 }
 
 function stopTimer(): void {

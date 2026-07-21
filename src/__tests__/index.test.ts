@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import plugin from "../index.js";
+import plugin, { reportFlushResult } from "../index.js";
 import type { OpenClawPluginApi } from "../openclaw-types.js";
 
 describe("plugin entry", () => {
@@ -36,5 +36,23 @@ describe("plugin entry", () => {
       "subagent_spawned",
       "subagent_ended",
     ]);
+  });
+
+  it("warns when a flush fails or drops telemetry without exposing the error", () => {
+    const warn = vi.fn();
+    const api = {
+      logger: { info: vi.fn(), warn },
+      on: vi.fn(),
+    } as unknown as OpenClawPluginApi;
+
+    reportFlushResult(
+      { pending: 2, dropped: 1, error: new Error("secret-token-value") },
+      api,
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      "Telemetry bridge delivery issue: 2 pending; 1 dropped.",
+    );
+    expect(warn.mock.calls.flat().join(" ")).not.toContain("secret-token-value");
   });
 });

@@ -33,6 +33,24 @@ describe("TelemetryQueue", () => {
     expect(succeeded.pending).toBe(0);
     expect(sentIds).toEqual([["stable-event-id"], ["stable-event-id"]]);
   });
+
+  it("reports overflow drops on the next flush", async () => {
+    const queue = new TelemetryQueue({
+      batchSize: 10,
+      maxRetries: 1,
+      maxQueueSize: 1,
+      sender: async () => {},
+    });
+
+    queue.enqueue(makeEvent("discarded"));
+    queue.enqueue(makeEvent("kept"));
+
+    await expect(queue.flush()).resolves.toMatchObject({
+      sent: 1,
+      pending: 0,
+      dropped: 1,
+    });
+  });
 });
 
 function makeEvent(id: string): MissionControlTelemetryEvent {
